@@ -42,6 +42,20 @@ const FlagshipSanctuary: React.FC = () => {
     moderationEnabled: true
   });
 
+// Reliable leave handler: leave session then force-redirect to /sanctuary
+  const handleLeave = async () => {
+    try {
+      await leaveSession();
+    } finally {
+      const target = '/sanctuary';
+      try {
+        navigate(target, { replace: true });
+      } catch {
+        window.location.href = target;
+      }
+    }
+  };
+
 // Handle session participant persistence
 React.useEffect(() => {
   if (sessionId && user?.id) {
@@ -278,7 +292,7 @@ if (isWaitingForScheduledStart) {
   return (
     <SessionWaitingRoom
       session={session}
-      onLeave={leaveSession}
+      onLeave={handleLeave}
       onCountdownComplete={() => {
         console.log('⏰ Countdown complete - session should convert automatically');
         setCountdownComplete(true);
@@ -439,7 +453,7 @@ if (!currentParticipant) {
             emergencyContactEnabled: session.emergencyContactEnabled
           }}
           currentUser={currentParticipant}
-          onLeave={leaveSession}
+          onLeave={handleLeave}
         />
       </div>
       <AuthDialog />

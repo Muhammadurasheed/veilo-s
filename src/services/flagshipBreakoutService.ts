@@ -473,10 +473,10 @@ class FlagshipBreakoutService {
       isValid: isTokenValid(token)
     });
 
-    const fullUrl = `${window.location.protocol}//${window.location.hostname}:8080/api/flagship-sanctuary/${sessionId}/breakout-rooms`;
-    console.log('🌐 Creating room at:', fullUrl);
+    const apiPath = `/api/flagship-sanctuary/${sessionId}/breakout-rooms`;
+    console.log('🌐 Creating room at:', apiPath);
     
-    const response = await fetch(fullUrl, {
+    const response = await fetch(apiPath, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
