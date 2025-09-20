@@ -6,6 +6,7 @@
 
 import enhancedSocketService from './enhancedSocket';
 import { getCurrentAuthToken, getAuthHeaders, isTokenValid, debugAuthState } from '@/utils/authUtils';
+import { FlagshipSanctuaryApi } from '@/services/flagshipSanctuaryApi';
 
 interface BreakoutRoom {
   id: string;
@@ -122,13 +123,44 @@ class FlagshipBreakoutService {
 
       console.log('✅ Permission check passed - user can create breakout rooms');
 
-      // Use socket for real-time creation
+      // Use socket for real-time creation with ack
       if (enhancedSocketService.connected) {
-        enhancedSocketService.createBreakoutRoom(sessionId, roomConfig);
-        this.connectionMetrics.roomsCreated++;
-        this.connectionMetrics.lastActivity = new Date().toISOString();
-        
-        return { success: true };
+        const result = await new Promise<{ success: boolean; room?: any; error?: string }>((resolve) => {
+          const timeout = setTimeout(() => {
+            enhancedSocketService.off('breakout_room_created');
+            enhancedSocketService.off('breakout_room_create_error');
+            resolve({ success: false, error: 'Timed out waiting for server acknowledgment' });
+          }, 8000);
+
+          const onCreated = (data: any) => {
+            if (data?.sessionId === sessionId && data?.room?.name === roomConfig.name) {
+              clearTimeout(timeout);
+              enhancedSocketService.off('breakout_room_created', onCreated as any);
+              enhancedSocketService.off('breakout_room_create_error', onError as any);
+              resolve({ success: true, room: data.room });
+            }
+          };
+
+          const onError = (err: any) => {
+            clearTimeout(timeout);
+            enhancedSocketService.off('breakout_room_created', onCreated as any);
+            enhancedSocketService.off('breakout_room_create_error', onError as any);
+            resolve({ success: false, error: err?.message || 'Server reported creation error' });
+          };
+
+          enhancedSocketService.on('breakout_room_created', onCreated as any);
+          enhancedSocketService.on('breakout_room_create_error', onError as any);
+
+          enhancedSocketService.createBreakoutRoom(sessionId, roomConfig);
+          this.connectionMetrics.roomsCreated++;
+          this.connectionMetrics.lastActivity = new Date().toISOString();
+        });
+
+        if (result.success) {
+          return { success: true, room: result.room };
+        }
+        // Socket path failed — fallback to HTTP API
+        return await this.createRoomViaAPI(sessionId, roomConfig);
       } else {
         // Fallback to HTTP API
         return await this.createRoomViaAPI(sessionId, roomConfig);
@@ -473,43 +505,27 @@ class FlagshipBreakoutService {
       isValid: isTokenValid(token)
     });
 
-    const apiPath = `/api/flagship-sanctuary/${sessionId}/breakout-rooms`;
-    console.log('🌐 Creating room at:', apiPath);
-    
-    const response = await fetch(apiPath, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders()
-      },
-      body: JSON.stringify(roomConfig)
-    });
+    // Align with backend route and minimal payload
+    const payload = {
+      name: roomConfig.name,
+      maxParticipants: roomConfig.maxParticipants
+    } as any;
 
-    if (response.ok) {
-      const data = await response.json();
-      const room = data.data?.room || data.room;
-      
-      if (room) {
-        this.roomCache.set(room.id, room);
+    try {
+      const res = await FlagshipSanctuaryApi.createBreakoutRoom(sessionId, payload);
+      if (res.success) {
+        const room = (res as any).room || (res.data as any)?.room || (res.data as any);
+        if (room?.id) {
+          this.roomCache.set(room.id, room);
+        }
+        return { success: true, room };
       }
-      
-      return { success: true, room };
-    } else {
-      const errorText = await response.text();
-      console.error('❌ Room creation failed:', {
-        status: response.status,
-        statusText: response.statusText,
-        error: errorText,
-        sessionId,
-        roomConfig
-      });
-      
-      // If 401, debug auth state
-      if (response.status === 401) {
-        debugAuthState();
-      }
-      
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+
+      console.error('❌ Room creation via API failed:', res.error);
+      throw new Error(res.error || 'API returned failure creating room');
+    } catch (err) {
+      console.error('❌ Room creation API exception:', err);
+      throw err instanceof Error ? err : new Error('Unexpected error creating room');
     }
   }
 
