@@ -260,7 +260,7 @@ export const EnhancedFlagshipSanctuary: React.FC = () => {
       });
       
       // Navigate back to sanctuaries page
-      navigate('/my-sanctuaries', { replace: true });
+      navigate('/sanctuary', { replace: true });
       
     } catch (error) {
       console.error('❌ Error during leave session:', error);
@@ -271,7 +271,7 @@ export const EnhancedFlagshipSanctuary: React.FC = () => {
         description: "You have left the sanctuary session",
       });
       
-      navigate('/my-sanctuaries', { replace: true });
+      navigate('/sanctuary', { replace: true });
     }
   };
 

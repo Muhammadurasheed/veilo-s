@@ -204,10 +204,10 @@ class FlagshipBreakoutService {
         throw new Error('No valid authentication token available');
       }
 
-      const fullUrl = `${window.location.protocol}//${window.location.hostname}:8080/api/flagship-sanctuary/${sessionId}/breakout-rooms`;
-      console.log('🌐 Making request to:', fullUrl);
+      const apiPath = `/api/flagship-sanctuary/${sessionId}/breakout-rooms`;
+      console.log('🌐 Making request to:', apiPath);
       
-      const response = await fetch(fullUrl, {
+      const response = await fetch(apiPath, {
         headers: {
           'Content-Type': 'application/json',
           ...getAuthHeaders()
