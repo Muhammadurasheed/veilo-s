@@ -215,25 +215,63 @@ export const EnhancedFlagshipSanctuary: React.FC = () => {
   const leaveSession = async () => {
     if (!sessionId || !user) return;
 
+    console.log('🚪 Leaving sanctuary session:', sessionId);
+    
     try {
-      const response = await fetch(`/api/flagship-sanctuary/${sessionId}/leave`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token') || localStorage.getItem('veilo-auth-token') || localStorage.getItem('token')}`
-        }
-      });
-
-      if (response.ok) {
-        setIsJoined(false);
-        navigate('/my-sanctuaries');
+      // First, disconnect from socket gracefully
+      if (socket && socket.service) {
+        socket.service.emit('leave_flagship_sanctuary', {
+          sessionId,
+          participantId: user.id
+        });
+        
+        // Small delay to ensure socket message is sent
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
-    } catch (error) {
+      
+      // Try to call backend API, but don't block on it
+      try {
+        const response = await fetch(`/api/flagship-sanctuary/${sessionId}/leave`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('auth_token') || localStorage.getItem('veilo-auth-token') || localStorage.getItem('token')}`
+          }
+        });
+        
+        if (response.ok) {
+          console.log('✅ Successfully notified backend of leave');
+        } else {
+          console.warn('⚠️ Backend leave notification failed, but continuing with client-side leave');
+        }
+      } catch (apiError) {
+        console.warn('⚠️ Backend API unreachable, performing client-side leave only:', apiError);
+      }
+      
+      // Always perform client-side cleanup and navigation
+      setIsJoined(false);
+      setCurrentBreakoutRoom(null);
+      setMessages([]);
+      setParticipants([]);
+      
       toast({
-        title: "Leave Failed",
-        description: "Could not leave the session",
-        variant: "destructive"
+        title: "Left Sanctuary",
+        description: "You have left the sanctuary session",
       });
+      
+      // Navigate back to sanctuaries page
+      navigate('/my-sanctuaries', { replace: true });
+      
+    } catch (error) {
+      console.error('❌ Error during leave session:', error);
+      
+      // Even if there's an error, still navigate away to prevent stuck state
+      toast({
+        title: "Left Sanctuary",
+        description: "You have left the sanctuary session",
+      });
+      
+      navigate('/my-sanctuaries', { replace: true });
     }
   };
 

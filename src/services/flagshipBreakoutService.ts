@@ -204,7 +204,10 @@ class FlagshipBreakoutService {
         throw new Error('No valid authentication token available');
       }
 
-      const response = await fetch(`/api/flagship-sanctuary/${sessionId}/breakout-rooms`, {
+      const fullUrl = `${window.location.protocol}//${window.location.hostname}:8080/api/flagship-sanctuary/${sessionId}/breakout-rooms`;
+      console.log('🌐 Making request to:', fullUrl);
+      
+      const response = await fetch(fullUrl, {
         headers: {
           'Content-Type': 'application/json',
           ...getAuthHeaders()
@@ -470,7 +473,10 @@ class FlagshipBreakoutService {
       isValid: isTokenValid(token)
     });
 
-    const response = await fetch(`/api/flagship-sanctuary/${sessionId}/breakout-rooms`, {
+    const fullUrl = `${window.location.protocol}//${window.location.hostname}:8080/api/flagship-sanctuary/${sessionId}/breakout-rooms`;
+    console.log('🌐 Creating room at:', fullUrl);
+    
+    const response = await fetch(fullUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

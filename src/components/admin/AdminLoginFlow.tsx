@@ -65,11 +65,13 @@ export const AdminLoginFlow: React.FC = () => {
           variant: "default"
         });
         
-        // Navigate to admin panel with a small delay to ensure state updates
+        // Navigate to admin panel immediately after successful login
         console.log('🔄 Redirecting to admin panel...');
+        
+        // Use window.location for guaranteed navigation
         setTimeout(() => {
-          navigate('/admin', { replace: true });
-          console.log('✅ Navigation completed');
+          window.location.href = '/admin';
+          console.log('✅ Navigation completed via window.location');
         }, 100);
         
       } else {
