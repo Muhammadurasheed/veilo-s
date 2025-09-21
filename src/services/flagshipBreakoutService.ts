@@ -526,20 +526,10 @@ class FlagshipBreakoutService {
       // If the modern endpoint is unavailable (404), try legacy route as fallback
       if (typeof res.error === 'string' && /404|Not Found/i.test(res.error)) {
         console.warn('⚠️ Breakout create 404 on modern route, attempting legacy /breakout-rooms endpoint');
+        // Minimal legacy payload expected by backend
         const legacyPayload = {
           name: roomConfig.name,
-          topic: roomConfig.topic,
           maxParticipants: roomConfig.maxParticipants,
-          facilitatorId: roomConfig.facilitatorId,
-          settings: {
-            allowTextChat: roomConfig.allowTextChat,
-            allowVoiceChat: roomConfig.allowVoiceChat,
-            allowScreenShare: roomConfig.allowScreenShare,
-            moderationEnabled: roomConfig.moderationEnabled,
-            recordingEnabled: roomConfig.recordingEnabled,
-          },
-          autoClose: roomConfig.autoClose,
-          autoCloseAfterMinutes: roomConfig.autoCloseAfterMinutes,
         } as any;
 
         const legacyResp = await fetch(`/api/flagship-sanctuary/${sessionId}/breakout-rooms`, {
@@ -560,6 +550,15 @@ class FlagshipBreakoutService {
 
         const txt = await legacyResp.text();
         console.error('❌ Legacy breakout create failed:', { status: legacyResp.status, statusText: legacyResp.statusText, error: txt });
+
+        // Some backends create the room but return 5xx; poll to confirm existence by name
+        const possiblyCreated = await this.pollForRoomByName(sessionId, roomConfig.name, 6, 1000);
+        if (possiblyCreated) {
+          this.roomCache.set(possiblyCreated.id, possiblyCreated);
+          console.warn('⚠️ Legacy API returned error but room exists; treating as success');
+          return { success: true, room: possiblyCreated };
+        }
+
         throw new Error(`HTTP ${legacyResp.status}: ${legacyResp.statusText}`);
       }
 
@@ -670,7 +669,30 @@ class FlagshipBreakoutService {
       console.error('❌ Flagship Breakout Service: Join error:', error);
     });
   }
+
+  // 🔎 Poll for room existence by name (handles eventual consistency on error responses)
+  private async pollForRoomByName(
+    sessionId: string,
+    name: string,
+    maxAttempts = 6,
+    intervalMs = 1000
+  ): Promise<BreakoutRoom | null> {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const resp = await this.getBreakoutRooms(sessionId);
+        if (resp.success && resp.rooms) {
+          const match = resp.rooms.find(r => r.name === name);
+          if (match) return match;
+        }
+      } catch (e) {
+        // ignore and retry
+      }
+      await new Promise(res => setTimeout(res, intervalMs));
+    }
+    return null;
+  }
 }
+
 
 // Create singleton instance
 const flagshipBreakoutService = new FlagshipBreakoutService();
