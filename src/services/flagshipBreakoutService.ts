@@ -522,6 +522,47 @@ class FlagshipBreakoutService {
       }
 
       console.error('❌ Room creation via API failed:', res.error);
+
+      // If the modern endpoint is unavailable (404), try legacy route as fallback
+      if (typeof res.error === 'string' && /404|Not Found/i.test(res.error)) {
+        console.warn('⚠️ Breakout create 404 on modern route, attempting legacy /breakout-rooms endpoint');
+        const legacyPayload = {
+          name: roomConfig.name,
+          topic: roomConfig.topic,
+          maxParticipants: roomConfig.maxParticipants,
+          facilitatorId: roomConfig.facilitatorId,
+          settings: {
+            allowTextChat: roomConfig.allowTextChat,
+            allowVoiceChat: roomConfig.allowVoiceChat,
+            allowScreenShare: roomConfig.allowScreenShare,
+            moderationEnabled: roomConfig.moderationEnabled,
+            recordingEnabled: roomConfig.recordingEnabled,
+          },
+          autoClose: roomConfig.autoClose,
+          autoCloseAfterMinutes: roomConfig.autoCloseAfterMinutes,
+        } as any;
+
+        const legacyResp = await fetch(`/api/flagship-sanctuary/${sessionId}/breakout-rooms`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify(legacyPayload),
+        });
+
+        if (legacyResp.ok) {
+          const data = await legacyResp.json();
+          const room = data.data?.room || data.room || data;
+          if (room?.id) this.roomCache.set(room.id, room);
+          return { success: true, room };
+        }
+
+        const txt = await legacyResp.text();
+        console.error('❌ Legacy breakout create failed:', { status: legacyResp.status, statusText: legacyResp.statusText, error: txt });
+        throw new Error(`HTTP ${legacyResp.status}: ${legacyResp.statusText}`);
+      }
+
       throw new Error(res.error || 'API returned failure creating room');
     } catch (err) {
       console.error('❌ Room creation API exception:', err);
