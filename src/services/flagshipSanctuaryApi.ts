@@ -207,7 +207,8 @@ export const FlagshipSanctuaryApi = {
     maxParticipants?: number;
     participantIds?: string[];
   }): Promise<FlagshipApiResponse<any>> {
-    return apiRequest('POST', `/api/flagship-sanctuary/${sessionId}/breakout`, data);
+    // Use legacy-compatible endpoint to avoid 404s on some deployments
+    return apiRequest('POST', `/api/flagship-sanctuary/${sessionId}/breakout-rooms`, data);
   },
 
   async getRecordings(sessionId: string): Promise<FlagshipApiResponse<any[]>> {

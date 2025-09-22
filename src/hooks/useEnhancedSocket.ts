@@ -324,8 +324,10 @@ export const useBreakoutRoom = (sessionId: string) => {
   }, [socket, sessionId]);
 
   const joinRoom = useCallback((roomId: string, participantData?: any) => {
-    socket.joinBreakoutRoom(roomId, participantData);
-  }, [socket]);
+    console.log('🚪 Joining breakout room via enhanced hook:', { sessionId, roomId, participantData });
+    // Emit with sessionId for server compatibility
+    socket.emit('join_breakout_room', { sessionId, roomId, participantData });
+  }, [socket, sessionId]);
 
   return {
     ...socket,
