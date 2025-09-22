@@ -219,7 +219,7 @@ export const useFlagshipBreakoutSocket = (
       }));
     }
     
-    logger.debug('📨 Processed breakout event:', event.type, event.data);
+    logger.debug('📨 Processed breakout event:', event.type);
   }, [enableAnalytics]);
 
   // Setup socket event listeners
