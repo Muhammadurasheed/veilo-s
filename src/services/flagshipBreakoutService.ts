@@ -7,6 +7,7 @@
 import enhancedSocketService from './enhancedSocket';
 import { getCurrentAuthToken, getAuthHeaders, isTokenValid, debugAuthState, getUserFromToken } from '@/utils/authUtils';
 import { FlagshipSanctuaryApi } from '@/services/flagshipSanctuaryApi';
+import { flagshipBreakoutBackend } from '@/services/flagshipBreakoutBackend';
 
 interface BreakoutRoom {
   id: string;
@@ -505,29 +506,43 @@ class FlagshipBreakoutService {
       isValid: isTokenValid(token)
     });
 
-    // Build payload with safe defaults that align with backend expectations
+    // Build payload using backend's expected schema (nested settings)
     const user = getUserFromToken();
     const facilitatorId = user?.id || user?._id || user?.userId;
 
-    const payload = {
+    const config = {
       name: roomConfig.name,
       topic: roomConfig.topic,
       maxParticipants: roomConfig.maxParticipants,
-      duration: roomConfig.duration,
       facilitatorId,
-      hostId: facilitatorId,
-      allowTextChat: roomConfig.allowTextChat ?? true,
-      allowVoiceChat: roomConfig.allowVoiceChat ?? true,
-      allowScreenShare: roomConfig.allowScreenShare ?? false,
-      moderationEnabled: roomConfig.moderationEnabled ?? true,
-      recordingEnabled: roomConfig.recordingEnabled ?? false,
+      duration: roomConfig.duration,
       autoClose: roomConfig.autoClose ?? true,
-      autoCloseAfterMinutes: roomConfig.autoCloseAfterMinutes ?? roomConfig.duration,
-      sessionId // some backends require it in body even if present in URL
-    } as any;
+      // Backend expects feature toggles under settings
+      settings: {
+        allowTextChat: roomConfig.allowTextChat ?? true,
+        allowVoiceChat: roomConfig.allowVoiceChat ?? true,
+        allowScreenShare: roomConfig.allowScreenShare ?? false,
+        moderationEnabled: roomConfig.moderationEnabled ?? true,
+        recordingEnabled: roomConfig.recordingEnabled ?? false,
+        voiceModulationEnabled: false,
+        allowReactions: true,
+        allowPolls: false
+      }
+    } as const;
 
     try {
-      const res = await FlagshipSanctuaryApi.createBreakoutRoom(sessionId, payload);
+      // Use dedicated backend adapter which matches server schema
+      const backendRes = await flagshipBreakoutBackend.createBreakoutRoom(sessionId, config as any);
+      if (backendRes.success && backendRes.room) {
+        this.roomCache.set(backendRes.room.id, backendRes.room as any);
+        return { success: true, room: backendRes.room as any };
+      }
+
+      console.error('❌ Room creation via backend adapter failed:', backendRes.error);
+
+      // Fallback to API service (some deployments still accept flat payload)
+      const fallbackPayload = { ...config, hostId: facilitatorId, sessionId } as any;
+      const res = await FlagshipSanctuaryApi.createBreakoutRoom(sessionId, fallbackPayload);
       if (res.success) {
         const room = (res as any).room || (res.data as any)?.room || (res.data as any);
         if (room?.id) {
@@ -541,7 +556,6 @@ class FlagshipBreakoutService {
       // If the modern endpoint is unavailable (404), try legacy route as fallback
       if (typeof res.error === 'string' && /404|Not Found/i.test(res.error)) {
         console.warn('⚠️ Breakout create 404 on modern route, attempting legacy /breakout-rooms endpoint');
-        // Legacy payload expected by some deployments
         const legacyPayload = {
           name: roomConfig.name,
           maxParticipants: roomConfig.maxParticipants,
