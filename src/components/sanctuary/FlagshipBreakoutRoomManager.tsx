@@ -4,7 +4,7 @@
  * Designed to surpass FAANG-level excellence
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -37,6 +37,7 @@ import {
   Grid3X3,
   Bug
 } from 'lucide-react';
+import { useAgoraAudio } from '@/hooks/useAgoraAudio';
 
 interface BreakoutRoom {
   id: string;
@@ -123,6 +124,21 @@ export const FlagshipBreakoutRoomManager: React.FC<FlagshipBreakoutRoomManagerPr
   // Refs for preventing duplicate operations
   const isInitialized = useRef(false);
   const roomCreationInProgress = useRef(false);
+
+  // Active room and voice wiring
+  const activeRoom = useMemo(() => breakoutRooms.find(r => r.id === currentUserRoom) || null, [breakoutRooms, currentUserRoom]);
+  const voice = useAgoraAudio({ sessionId, channelName: activeRoom?.agoraChannelName, uid: currentUser.id });
+
+  useEffect(() => {
+    // Auto-connect voice when inside a breakout room
+    if (activeRoom?.agoraChannelName) {
+      voice.connect();
+    } else {
+      // Ensure we disconnect when leaving
+      voice.disconnect();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeRoom?.agoraChannelName]);
 
   // Handle room join/leave callbacks
   useEffect(() => {
@@ -218,6 +234,7 @@ export const FlagshipBreakoutRoomManager: React.FC<FlagshipBreakoutRoomManagerPr
         avatarIndex: Math.floor(Math.random() * 8) + 1
       });
       
+      // Voice will auto-connect via effect when activeRoom updates
     } catch (error) {
       console.error('❌ Flagship: Join failed:', error);
     }
@@ -229,12 +246,13 @@ export const FlagshipBreakoutRoomManager: React.FC<FlagshipBreakoutRoomManagerPr
       console.log('🚶 Flagship: Leaving breakout room...');
       
       await leaveRoom(roomId);
+      voice.disconnect();
       onLeaveRoom?.(roomId);
       
     } catch (error) {
       console.error('❌ Flagship: Leave failed:', error);
     }
-  }, [leaveRoom, onLeaveRoom]);
+  }, [leaveRoom, onLeaveRoom, voice]);
 
   // Auto-assign participants
   const autoAssignParticipants = useCallback(async () => {
@@ -303,6 +321,19 @@ export const FlagshipBreakoutRoomManager: React.FC<FlagshipBreakoutRoomManagerPr
             <span>Flagship Breakout Rooms</span>
             <Badge variant="secondary">{breakoutRooms.length}</Badge>
             <ConnectionStatus />
+            {activeRoom && (
+              <div className="flex items-center space-x-2 ml-4">
+                {voice.isConnected ? (
+                  <Badge variant="outline" className="text-xs">Voice Connected</Badge>
+                ) : (
+                  <Badge variant="secondary" className="text-xs">Voice Idle</Badge>
+                )}
+                <Button size="sm" variant="outline" onClick={voice.toggleMicrophone} disabled={!voice.isConnected}>
+                  {voice.isMuted ? <MicOff className="h-4 w-4 mr-1" /> : <Mic className="h-4 w-4 mr-1" />}
+                  {voice.isMuted ? 'Unmute' : 'Mute'}
+                </Button>
+              </div>
+            )}
           </div>
           
           {(currentUser.isHost || currentUser.isModerator) ? (

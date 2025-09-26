@@ -5,7 +5,7 @@
  */
 
 import enhancedSocketService from './enhancedSocket';
-import { getCurrentAuthToken, getAuthHeaders, isTokenValid, debugAuthState } from '@/utils/authUtils';
+import { getCurrentAuthToken, getAuthHeaders, isTokenValid, debugAuthState, getUserFromToken } from '@/utils/authUtils';
 import { FlagshipSanctuaryApi } from '@/services/flagshipSanctuaryApi';
 
 interface BreakoutRoom {
@@ -505,10 +505,25 @@ class FlagshipBreakoutService {
       isValid: isTokenValid(token)
     });
 
-    // Align with backend route and minimal payload
+    // Build payload with safe defaults that align with backend expectations
+    const user = getUserFromToken();
+    const facilitatorId = user?.id || user?._id || user?.userId;
+
     const payload = {
       name: roomConfig.name,
-      maxParticipants: roomConfig.maxParticipants
+      topic: roomConfig.topic,
+      maxParticipants: roomConfig.maxParticipants,
+      duration: roomConfig.duration,
+      facilitatorId,
+      hostId: facilitatorId,
+      allowTextChat: roomConfig.allowTextChat ?? true,
+      allowVoiceChat: roomConfig.allowVoiceChat ?? true,
+      allowScreenShare: roomConfig.allowScreenShare ?? false,
+      moderationEnabled: roomConfig.moderationEnabled ?? true,
+      recordingEnabled: roomConfig.recordingEnabled ?? false,
+      autoClose: roomConfig.autoClose ?? true,
+      autoCloseAfterMinutes: roomConfig.autoCloseAfterMinutes ?? roomConfig.duration,
+      sessionId // some backends require it in body even if present in URL
     } as any;
 
     try {
@@ -526,10 +541,12 @@ class FlagshipBreakoutService {
       // If the modern endpoint is unavailable (404), try legacy route as fallback
       if (typeof res.error === 'string' && /404|Not Found/i.test(res.error)) {
         console.warn('⚠️ Breakout create 404 on modern route, attempting legacy /breakout-rooms endpoint');
-        // Minimal legacy payload expected by backend
+        // Legacy payload expected by some deployments
         const legacyPayload = {
           name: roomConfig.name,
           maxParticipants: roomConfig.maxParticipants,
+          facilitatorId,
+          sessionId
         } as any;
 
         const legacyResp = await fetch(`/api/flagship-sanctuary/${sessionId}/breakout-rooms`, {

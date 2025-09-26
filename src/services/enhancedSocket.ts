@@ -317,7 +317,7 @@ class EnhancedSocketService {
   }
 
   joinBreakoutRoom(roomId: string, participantData?: any): void {
-    const eventData = { roomId, participantData };
+    const eventData = { sessionId: this.currentSessionId, roomId, participantData };
     
     if (this.isConnected) {
       this.socket?.emit('join_breakout_room', eventData);

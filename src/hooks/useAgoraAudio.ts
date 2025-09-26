@@ -12,6 +12,7 @@ import axios from 'axios';
 interface AgoraConfig {
   sessionId: string;
   uid?: string | number;
+  channelName?: string; // optional: use a specific channel (e.g., breakout room)
 }
 
 interface AudioStats {
@@ -62,11 +63,16 @@ export const useAgoraAudio = (config: AgoraConfig) => {
     const fetchCredentials = async () => {
       try {
         setIsLoading(true);
-        const response = await axios.post('/api/agora/token', {
-          sessionId: config.sessionId,
+        const payload: any = {
           uid: config.uid,
           role: 'publisher'
-        });
+        };
+        if (config.channelName) {
+          payload.channelName = config.channelName;
+        } else {
+          payload.sessionId = config.sessionId;
+        }
+        const response = await axios.post('/api/agora/token', payload);
 
         if (response.data.success) {
           setAgoraCredentials(response.data.data);
@@ -86,7 +92,7 @@ export const useAgoraAudio = (config: AgoraConfig) => {
     };
 
     fetchCredentials();
-  }, [config.sessionId, config.uid, toast]);
+  }, [config.sessionId, config.channelName, config.uid, toast]);
 
   // Initialize Agora client when credentials are available
   useEffect(() => {
